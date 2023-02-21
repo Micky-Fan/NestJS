@@ -57,6 +57,12 @@ $ npm run test:e2e
 # test coverage
 $ npm run test:cov
 ```
+## API
+- `GET` `http://localhost:3000/data?user=id`
+
+## Websocket
+1. use `subscribe` / `unsubscribe` / `ohlc` as event name and send the currency pair e.g. btcusd / ethusd ...etc
+2. listen to the event: `price` or `ohlc`
 
 ## Support
 
