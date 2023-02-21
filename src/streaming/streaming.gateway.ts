@@ -7,11 +7,12 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { StreamingService } from './streaming.service';
 
 @WebSocketGateway({ namespace: 'streaming' })
 export class StreamingGateway implements OnModuleInit {
   public bitstampWs;
-  constructor() {
+  constructor(private readonly streamingService: StreamingService) {
     this.bitstampWs = new WebSocket('wss://ws.bitstamp.net.');
   }
   @WebSocketServer()
@@ -61,3 +62,22 @@ export class StreamingGateway implements OnModuleInit {
       });
     });
   }
+
+  @SubscribeMessage('ohlc')
+  subscribeOhlc(@MessageBody() currentPair: string) {
+    this.getOhlc(currentPair);
+  }
+
+  async getOhlc(currencyPair: string) {
+    const ohlc = await this.streamingService.getOhlc(currencyPair);
+    this.server.emit('ohlc', {
+      open: ohlc[0].open,
+      high: ohlc[0].high,
+      low: ohlc[0].low,
+      close: ohlc[0].close,
+    });
+    setTimeout(() => {
+      this.getOhlc(currencyPair);
+    }, 60000);
+  }
+}
