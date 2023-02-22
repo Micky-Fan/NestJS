@@ -18,7 +18,7 @@ export class userThrottlerGuard extends ThrottlerGuard {
     const ipStorage = await this.storageService.increment(ipKey, 60);
     if (idStorage.totalHits > 5 || ipStorage.totalHits > 10) {
       throw new HttpException(
-        { ip: ip, id: idStorage.totalHits },
+        { ip: ipStorage.totalHits, id: idStorage.totalHits },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
