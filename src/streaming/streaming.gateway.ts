@@ -1,83 +1,68 @@
-import { OnModuleInit } from '@nestjs/common';
-import { WebSocket } from 'ws';
 import {
+  OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
-  MessageBody,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
-import { StreamingService } from './streaming.service';
 
-@WebSocketGateway({ namespace: 'streaming' })
-export class StreamingGateway implements OnModuleInit {
-  public bitstampWs;
-  constructor(private readonly streamingService: StreamingService) {
-    this.bitstampWs = new WebSocket('wss://ws.bitstamp.net.');
-  }
+import { Server, WebSocket } from 'ws';
+
+@WebSocketGateway(3001)
+export class StreamingGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
-  onModuleInit() {
-    // connect bitstamp
-    this.bitstampWs.on('open', () => {
-      console.log('connect');
-    });
-    this.bitstampWs.on('error', console.error);
 
-    this.server.on('connect', (socket) => {
-      console.log('socket id', socket.id);
-      console.log('connected');
-    });
+  // user and what he subscribed
+  private subscriptions = new Map<any, string[]>();
+  private id: string;
+
+  handleConnection(ws: WebSocket) {
+    // unique id
+    this.id = ws._socket.remoteAddress;
+    console.log('Client connected ', this.id);
+    this.subscriptions.set(this.id, []);
+  }
+
+  handleDisconnect() {
+    console.log('Client disconnected', this.id);
+    this.subscriptions.delete(this.id);
   }
 
   @SubscribeMessage('subscribe')
-  subscribe(@MessageBody() currencyPair: string) {
-    const subscribeObj = {
-      event: 'bts:subscribe',
-      data: {
-        channel: `live_orders_${currencyPair}`,
-      },
-    };
-    this.bitstampWs.send(JSON.stringify(subscribeObj));
-    this.bitstampWs.on('message', (message) => {
-      const data = JSON.parse(message);
-      this.server.emit('price', {
-        price: data.data.price,
-      });
-    });
+  handleSubscribe(ws: WebSocket, data: { currencyPair: string }) {
+    console.log(`Client ${this.id} subscribed to pairs: ${data.currencyPair}`);
+    const pairs = this.subscriptions.get(this.id);
+    // check subscribe limit
+    if (pairs.length >= 10) {
+      console.log('error');
+      ws.send(
+        JSON.stringify({
+          event: 'error',
+          message: 'You have already subscribed to 10 currency pairs.',
+        }),
+      );
+    } else {
+      // check currency pair exist or not
+      if (!pairs.includes(data.currencyPair)) {
+        pairs.push(data.currencyPair);
+      }
+    }
+    console.log('pairs===>', pairs);
   }
+
   @SubscribeMessage('unsubscribe')
-  unsubscibe(@MessageBody() currencyPair: string) {
-    const subscribeObj = {
-      event: 'bts:unsubscribe',
-      data: {
-        channel: `live_orders_${currencyPair}`,
-      },
-    };
-    this.bitstampWs.send(JSON.stringify(subscribeObj));
-    this.bitstampWs.on('message', (message: string) => {
-      const data = JSON.parse(message);
-      this.server.emit('price', {
-        price: data.data.price,
-      });
-    });
-  }
+  handleUnsubscribe(ws: WebSocket, data: { currencyPair: string }) {
+    console.log(`Client unsubscribed from ${data.currencyPair}`);
+    const pairs = this.subscriptions.get(this.id) || [];
+    const index = pairs.indexOf(data.currencyPair);
 
-  @SubscribeMessage('ohlc')
-  subscribeOhlc(@MessageBody() currentPair: string) {
-    this.getOhlc(currentPair);
-  }
-
-  async getOhlc(currencyPair: string) {
-    const ohlc = await this.streamingService.getOhlc(currencyPair);
-    this.server.emit('ohlc', {
-      open: ohlc[0].open,
-      high: ohlc[0].high,
-      low: ohlc[0].low,
-      close: ohlc[0].close,
-    });
-    setTimeout(() => {
-      this.getOhlc(currencyPair);
-    }, 60000);
+    if (index !== -1) {
+      pairs.splice(index, 1);
+      this.subscriptions.set(this.id, pairs);
+    }
+    console.log('new pair==>', this.subscriptions.get(this.id));
   }
 }
