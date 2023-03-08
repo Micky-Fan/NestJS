@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 
 import { Server, WebSocket } from 'ws';
+import { BitstampService } from 'src/socket/bitstamp.service';
 
 @WebSocketGateway(3001)
 export class StreamingGateway
@@ -19,6 +20,7 @@ export class StreamingGateway
   private subscriptions = new Map<any, string[]>();
   private id: string;
 
+  constructor(private readonly bitstampService: BitstampService) {}
   handleConnection(ws: WebSocket) {
     // unique id
     this.id = ws._socket.remoteAddress;
@@ -35,22 +37,18 @@ export class StreamingGateway
   handleSubscribe(ws: WebSocket, data: { currencyPair: string }) {
     console.log(`Client ${this.id} subscribed to pairs: ${data.currencyPair}`);
     const pairs = this.subscriptions.get(this.id);
-    // check subscribe limit
-    if (pairs.length >= 10) {
-      console.log('error');
-      ws.send(
-        JSON.stringify({
-          event: 'error',
-          message: 'You have already subscribed to 10 currency pairs.',
-        }),
-      );
-    } else {
-      // check currency pair exist or not
-      if (!pairs.includes(data.currencyPair)) {
-        pairs.push(data.currencyPair);
-      }
+    // check currency pair exist or not
+    if (pairs.includes(data.currencyPair)) {
+      return;
     }
-    console.log('pairs===>', pairs);
+    pairs.push(data.currencyPair);
+
+    // open the channel if no one has subscribed to this currency pair
+    if (!this.isChannelSubscribed(data.currencyPair)) {
+      this.bitstampService.subscribeBitstamp(data.currencyPair);
+    }
+
+    console.log('data.currencyPair', data.currencyPair);
   }
 
   @SubscribeMessage('unsubscribe')
@@ -63,6 +61,21 @@ export class StreamingGateway
       pairs.splice(index, 1);
       this.subscriptions.set(this.id, pairs);
     }
+
+    // close the channel if no one has subscribed
+    if (!this.isChannelSubscribed) {
+      this.bitstampService.unSubscribeBitstamp(data.currencyPair);
+    }
     console.log('new pair==>', this.subscriptions.get(this.id));
+  }
+
+  isChannelSubscribed(currencyPair: string) {
+    const allPairs = this.subscriptions.values();
+    for (const pairs of allPairs) {
+      if (pairs.includes(currencyPair)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
