@@ -18,35 +18,30 @@ export class StreamingGateway
 
   // user and what he subscribed
   private subscriptions = new Map<any, string[]>();
-  private id: string;
 
   constructor(private readonly bitstampService: BitstampService) {}
   handleConnection(ws: WebSocket) {
-    // unique id
-    this.id = ws._socket.remoteAddress;
-    console.log('Client connected ', this.id);
-    this.subscriptions.set(this.id, []);
+    this.subscriptions.set(ws, []);
   }
 
-  handleDisconnect() {
-    console.log('Client disconnected', this.id);
-    this.subscriptions.delete(this.id);
+  handleDisconnect(ws: WebSocket) {
+    this.subscriptions.delete(ws);
   }
 
   @SubscribeMessage('subscribe')
   handleSubscribe(ws: WebSocket, data: { currencyPair: string }) {
+    // open the channel if no one has subscribed to this currency pair
+    if (!this.isChannelSubscribed(data.currencyPair)) {
     console.log(`Client ${this.id} subscribed to pairs: ${data.currencyPair}`);
     const pairs = this.subscriptions.get(this.id);
+    }
+
+    const pairs = this.subscriptions.get(ws);
     // check currency pair exist or not
     if (pairs.includes(data.currencyPair)) {
       return;
     }
     pairs.push(data.currencyPair);
-
-    // open the channel if no one has subscribed to this currency pair
-    if (!this.isChannelSubscribed(data.currencyPair)) {
-      this.bitstampService.subscribeBitstamp(data.currencyPair);
-    }
 
     console.log('data.currencyPair', data.currencyPair);
   }
@@ -54,19 +49,19 @@ export class StreamingGateway
   @SubscribeMessage('unsubscribe')
   handleUnsubscribe(ws: WebSocket, data: { currencyPair: string }) {
     console.log(`Client unsubscribed from ${data.currencyPair}`);
-    const pairs = this.subscriptions.get(this.id) || [];
+    const pairs = this.subscriptions.get(ws) || [];
     const index = pairs.indexOf(data.currencyPair);
 
     if (index !== -1) {
       pairs.splice(index, 1);
-      this.subscriptions.set(this.id, pairs);
+      this.subscriptions.set(ws, pairs);
     }
 
     // close the channel if no one has subscribed
     if (!this.isChannelSubscribed) {
       this.bitstampService.unSubscribeBitstamp(data.currencyPair);
     }
-    console.log('new pair==>', this.subscriptions.get(this.id));
+    console.log('new pair==>', this.subscriptions.get(ws));
   }
 
   isChannelSubscribed(currencyPair: string) {
