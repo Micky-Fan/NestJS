@@ -3,12 +3,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DataModule } from './data/data.module';
 import { HttpModule } from '@nestjs/axios';
-import { StreamingGateway } from './streaming/streaming.gateway';
-import { StreamingService } from './streaming/streaming.service';
+import { StreamingModule } from './streaming/streaming.module';
 
 @Module({
-  imports: [HttpModule, DataModule],
+  imports: [HttpModule, DataModule, StreamingModule],
   controllers: [AppController],
-  providers: [AppService, StreamingGateway, StreamingService],
+  providers: [AppService],
 })
 export class AppModule {}
