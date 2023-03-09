@@ -15,7 +15,7 @@ export class BitstampService implements OnModuleInit {
     this.bitstampWs.on('error', console.error);
   }
 
-  subscribe(currencyPair: string) {
+  openChannel(currencyPair: string) {
     const data = JSON.stringify({
       event: 'bts:subscribe',
       data: {
@@ -25,7 +25,7 @@ export class BitstampService implements OnModuleInit {
     this.bitstampWs.send(data);
   }
 
-  unsubscribe(currencyPair: string) {
+  closeChannel(currencyPair: string) {
     const data = JSON.stringify({
       event: 'bts:unsubscribe',
       data: {

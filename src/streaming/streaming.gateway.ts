@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 
 import { Server, WebSocket } from 'ws';
+import { StreamingService } from './streaming.service';
 import { BitstampService } from 'src/socket/bitstamp.service';
 
 @WebSocketGateway(3001)
@@ -19,7 +20,10 @@ export class StreamingGateway
   // user and what he subscribed
   private subscriptions = new Map<any, string[]>();
 
-  constructor(private readonly bitstampService: BitstampService) {}
+  constructor(
+    private readonly bitstampService: BitstampService,
+    private readonly streamingService: StreamingService,
+  ) {}
   handleConnection(ws: WebSocket) {
     this.subscriptions.set(ws, []);
   }
@@ -32,8 +36,7 @@ export class StreamingGateway
   handleSubscribe(ws: WebSocket, data: { currencyPair: string }) {
     // open the channel if no one has subscribed to this currency pair
     if (!this.isChannelSubscribed(data.currencyPair)) {
-    console.log(`Client ${this.id} subscribed to pairs: ${data.currencyPair}`);
-    const pairs = this.subscriptions.get(this.id);
+      this.bitstampService.openChannel(data.currencyPair);
     }
 
     const pairs = this.subscriptions.get(ws);
@@ -43,7 +46,7 @@ export class StreamingGateway
     }
     pairs.push(data.currencyPair);
 
-    console.log('data.currencyPair', data.currencyPair);
+    this.streamingService.subscribe(data.currencyPair, ws);
   }
 
   @SubscribeMessage('unsubscribe')
@@ -57,9 +60,12 @@ export class StreamingGateway
       this.subscriptions.set(ws, pairs);
     }
 
+    // remove the WebSocket from the observer list of the StreamingService
+    this.streamingService.unsubscribe(data.currencyPair);
+
     // close the channel if no one has subscribed
-    if (!this.isChannelSubscribed) {
-      this.bitstampService.unSubscribeBitstamp(data.currencyPair);
+    if (!this.isChannelSubscribed(data.currencyPair)) {
+      this.bitstampService.closeChannel(data.currencyPair);
     }
     console.log('new pair==>', this.subscriptions.get(ws));
   }
